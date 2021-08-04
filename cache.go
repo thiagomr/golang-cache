@@ -59,15 +59,15 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 // GetPricesFor gets the prices for several items at once, some might be found in the cache, others might not
 // If any of the operations returns an error, it should return an error as well
 func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
-	nitems := len(itemCodes)
+	nItems := len(itemCodes)
 	results := []float64{}
 
-	cresults := make(chan float64, nitems)
-	cfinished := make(chan bool, 1)
-	cerr := make(chan error, 1)
+	cResults := make(chan float64, nItems)
+	cFinished := make(chan bool, 1)
+	cErr := make(chan error, 1)
 
 	var wg sync.WaitGroup
-	wg.Add(nitems)
+	wg.Add(nItems)
 
 	for _, itemCode := range itemCodes {
 		go func(code string) {
@@ -75,26 +75,26 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 			price, err := c.GetPriceFor(code)
 
 			if err != nil {
-				cerr <- err
+				cErr <- err
 			}
 
-			cresults <- price
+			cResults <- price
 		}(itemCode)
 	}
 
 	go func() {
 		wg.Wait()
-		close(cfinished)
+		close(cFinished)
 	}()
 
 	select {
-	case <-cfinished:
-		for i := 0; i < nitems; i++ {
-			results = append(results, <-cresults)
+	case <-cFinished:
+		for i := 0; i < nItems; i++ {
+			results = append(results, <-cResults)
 		}
 
 		return results, nil
-	case <-cerr:
+	case <-cErr:
 		{
 			return []float64{}, nil
 		}
