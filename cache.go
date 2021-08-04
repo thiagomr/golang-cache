@@ -20,6 +20,7 @@ type TransparentCache struct {
 	maxAge             time.Duration
 	prices             map[string]float64
 	pricesAge          map[string]time.Time
+	mutex              sync.Mutex
 }
 
 func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) *TransparentCache {
@@ -28,6 +29,7 @@ func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) 
 		maxAge:             maxAge,
 		prices:             map[string]float64{},
 		pricesAge:          map[string]time.Time{},
+		mutex:              sync.Mutex{},
 	}
 }
 
@@ -46,8 +48,10 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 		return 0, fmt.Errorf("getting price from service : %v", err.Error())
 	}
 
+	c.mutex.Lock()
 	c.prices[itemCode] = price
 	c.pricesAge[itemCode] = time.Now()
+	c.mutex.Unlock()
 
 	return price, nil
 }
@@ -90,9 +94,8 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 		}
 
 		return results, nil
-	case err := <-cerr:
+	case <-cerr:
 		{
-			fmt.Println("get prices error", err)
 			return []float64{}, nil
 		}
 	}
