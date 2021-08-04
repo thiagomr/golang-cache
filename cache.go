@@ -2,6 +2,7 @@ package sample1
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -56,21 +57,43 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
 	nitems := len(itemCodes)
 	results := []float64{}
+
 	cresults := make(chan float64, nitems)
+	cfinished := make(chan bool, 1)
+	cerr := make(chan error, 1)
+
+	var wg sync.WaitGroup
+	wg.Add(nitems)
 
 	for _, itemCode := range itemCodes {
 		go func(code string) {
-			price, _ := c.GetPriceFor(code)
-			// if err != nil {
-			// 	return []float64{}, err
-			// }
+			defer wg.Done()
+			price, err := c.GetPriceFor(code)
+
+			if err != nil {
+				cerr <- err
+			}
+
 			cresults <- price
 		}(itemCode)
 	}
 
-	for i := 0; i < nitems; i++ {
-		results = append(results, <-cresults)
-	}
+	go func() {
+		wg.Wait()
+		close(cfinished)
+	}()
 
-	return results, nil
+	select {
+	case <-cfinished:
+		for i := 0; i < nitems; i++ {
+			results = append(results, <-cresults)
+		}
+
+		return results, nil
+	case err := <-cerr:
+		{
+			fmt.Println("get prices error", err)
+			return []float64{}, nil
+		}
+	}
 }
